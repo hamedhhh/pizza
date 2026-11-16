@@ -1,0 +1,507 @@
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Pizza Topping Puzzle</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lilita+One&family=Nunito:wght@600;800&display=swap">
+<style>
+  /* Layout: one screen, top to bottom: score bar, the pizza filling the middle, topping tray at the bottom.
+     Single deliberate look: a red gingham tablecloth with paper-coloured panels. */
+  :root {
+    --cloth: #b8322a;
+    --cloth-check: rgba(255, 246, 228, 0.15);
+    --paper: #fff6e4;
+    --paper-edge: #e6d5b5;
+    --ink: #3a1f14;
+    --ink-soft: #7a5a48;
+    --crust: #d49a55;
+    --crust-dark: #b67a3a;
+    --sauce: #c4391f;
+    --cheese: #f7cf6a;
+    --cheese-deep: #eeb94e;
+    --basil: #2f7d3b;
+    --basil-dark: #1f5a28;
+    --font-display: "Lilita One", "Arial Rounded MT Bold", "Trebuchet MS", sans-serif;
+    --font-body: "Nunito", "Segoe UI", system-ui, sans-serif;
+    --piece: clamp(46px, 13vw, 62px);
+  }
+
+  html, body { height: 100%; }
+  body {
+    box-sizing: border-box;
+    padding-block: 12px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    background-color: var(--cloth);
+    background-image:
+      linear-gradient(90deg, var(--cloth-check) 50%, transparent 50%),
+      linear-gradient(var(--cloth-check) 50%, transparent 50%);
+    background-size: 44px 44px;
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-weight: 600;
+    font-size: 16px;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .app {
+    height: 100%;
+    max-width: 560px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  /* Score bar */
+  .hud {
+    background: var(--paper);
+    border-radius: 14px;
+    padding: 8px 14px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px 16px;
+    box-shadow: 0 3px 0 rgba(58, 31, 20, 0.25);
+  }
+  .hud h1 {
+    margin: 0;
+    font-family: var(--font-display);
+    font-weight: 400;
+    font-size: 22px;
+    color: var(--cloth);
+    letter-spacing: 0.01em;
+  }
+  .stats { display: flex; gap: 16px; align-items: center; }
+  .stat { display: flex; flex-direction: column; align-items: center; line-height: 1.1; }
+  .stat span {
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--ink-soft);
+  }
+  .stat b {
+    font-family: var(--font-display);
+    font-weight: 400;
+    font-size: 22px;
+    font-variant-numeric: tabular-nums;
+  }
+  .stat b.bump { animation: bump 0.35s ease-out; }
+
+  /* Pizza */
+  .stage {
+    flex: 1;
+    min-height: 200px;
+    container-type: size;
+    display: grid;
+    place-items: center;
+  }
+  .pizza {
+    position: relative;
+    width: min(100cqw, 100cqh);
+    aspect-ratio: 1;
+    max-width: 100%;
+    border-radius: 50%;
+    background:
+      repeating-conic-gradient(from 0deg, rgba(58, 31, 20, 0.16) 0deg 0.5deg, transparent 0.5deg 45deg),
+      radial-gradient(circle at 30% 28%, var(--cheese-deep) 0 5%, transparent 6%),
+      radial-gradient(circle at 68% 36%, var(--cheese-deep) 0 4%, transparent 5%),
+      radial-gradient(circle at 42% 72%, var(--cheese-deep) 0 6%, transparent 7%),
+      radial-gradient(circle at 74% 70%, var(--cheese-deep) 0 3.5%, transparent 4.5%),
+      radial-gradient(circle, var(--cheese) 0 59%, var(--sauce) 60% 63%, var(--crust) 64% 69%, var(--crust-dark) 70%);
+    box-shadow: 0 0 0 6px var(--paper), 0 10px 0 6px rgba(58, 31, 20, 0.28);
+  }
+  .pizza.done { animation: spin 0.9s cubic-bezier(0.3, 0.8, 0.3, 1); }
+
+  .spot {
+    position: absolute;
+    translate: -50% -50%;
+    padding: 0;
+    border: 0;
+    background: none;
+    border-radius: 50%;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+  .spot svg { display: block; width: 100%; height: 100%; filter: brightness(0); opacity: 0.2; }
+  .spot.filled { cursor: default; }
+  .spot.filled svg { filter: drop-shadow(0 2px 1px rgba(58, 31, 20, 0.3)); opacity: 1; animation: pop 0.3s ease-out; }
+  .spot.miss { animation: shake 0.35s; }
+
+  /* Tray */
+  .tray {
+    background: var(--paper);
+    border-radius: 16px;
+    padding: 10px 12px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    box-shadow: 0 3px 0 rgba(58, 31, 20, 0.25);
+  }
+  .status {
+    margin: 0;
+    text-align: center;
+    font-size: 15px;
+    font-weight: 800;
+    min-height: 1.4em;
+  }
+  .pieces { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+  .piece {
+    width: var(--piece);
+    height: var(--piece);
+    padding: 6px;
+    box-sizing: border-box;
+    border: 2px dashed var(--paper-edge);
+    border-radius: 12px;
+    background: #fffdf6;
+    cursor: grab;
+    touch-action: none;
+  }
+  .piece svg { display: block; width: 100%; height: 100%; pointer-events: none; }
+  .piece.selected { border: 2px solid var(--basil); box-shadow: 0 0 0 3px rgba(47, 125, 59, 0.3); }
+  .piece.lifting svg { opacity: 0.2; }
+  .piece.used { visibility: hidden; }
+
+  .ghost {
+    position: fixed;
+    z-index: 20;
+    pointer-events: none;
+    translate: -50% -50%;
+    filter: drop-shadow(0 8px 5px rgba(58, 31, 20, 0.4));
+  }
+  .ghost svg { display: block; width: 100%; height: 100%; }
+
+  .finish { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 6px 0 2px; }
+  .btn {
+    font-family: var(--font-display);
+    font-size: 20px;
+    color: var(--paper);
+    background: var(--basil);
+    border: 0;
+    border-radius: 12px;
+    padding: 12px 22px;
+    box-shadow: 0 4px 0 var(--basil-dark);
+    cursor: pointer;
+  }
+  .btn:active { translate: 0 3px; box-shadow: 0 1px 0 var(--basil-dark); }
+  .link {
+    font: inherit;
+    font-size: 13px;
+    font-weight: 800;
+    color: var(--ink-soft);
+    background: none;
+    border: 0;
+    padding: 6px 4px;
+    text-decoration: underline;
+    cursor: pointer;
+  }
+  button:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+
+  @keyframes pop { from { scale: 1.5; } to { scale: 1; } }
+  @keyframes bump { 50% { scale: 1.4; color: var(--basil); } }
+  @keyframes shake { 25% { transform: translateX(-6px); } 50% { transform: translateX(6px); } 75% { transform: translateX(-4px); } }
+  @keyframes spin { to { rotate: 360deg; } }
+  @media (prefers-reduced-motion: reduce) {
+    .pizza.done, .spot.filled svg, .spot.miss, .stat b.bump { animation: none; }
+  }
+</style>
+
+<div class="app">
+  <header class="hud">
+    <h1>Pizza Puzzle</h1>
+    <div class="stats">
+      <div class="stat"><span>Level</span><b id="level">1</b></div>
+      <div class="stat"><span>Score</span><b id="score">0</b></div>
+      <div class="stat"><span>Best</span><b id="best">0</b></div>
+      <button class="link" id="restart" type="button">Start over</button>
+    </div>
+  </header>
+
+  <main class="stage">
+    <div class="pizza" id="pizza" aria-label="Pizza with topping outlines"></div>
+  </main>
+
+  <section class="tray">
+    <p class="status" id="status" aria-live="polite"></p>
+    <div class="pieces" id="pieces"></div>
+    <div class="finish" id="finish" hidden>
+      <button class="btn" id="next" type="button">Next pizza</button>
+    </div>
+  </section>
+</div>
+
+<script>
+(function () {
+  var TYPES = {
+    pepperoni: '<circle cx="20" cy="20" r="17" fill="#b5362a" stroke="#8c261d" stroke-width="2"/><circle cx="14" cy="14" r="2.2" fill="#8c261d"/><circle cx="26" cy="17" r="1.8" fill="#8c261d"/><circle cx="17" cy="27" r="2" fill="#8c261d"/>',
+    mushroom: '<path d="M15 24h10l1.5 10c.3 2-13.3 2-13 0z" fill="#eadcc2" stroke="#9c8562" stroke-width="2" stroke-linejoin="round"/><path d="M3 21C3 10 11 5 20 5s17 5 17 16c0 3-3 4-7 4H10c-4 0-7-1-7-4z" fill="#eadcc2" stroke="#9c8562" stroke-width="2" stroke-linejoin="round"/>',
+    olive: '<circle cx="20" cy="20" r="8" fill="none" stroke="#2b2a35" stroke-width="7"/>',
+    onion: '<circle cx="20" cy="20" r="15" fill="none" stroke="#a24b9a" stroke-width="4"/>',
+    pepper: '<path d="M6 28C7 9 33 9 34 28" fill="none" stroke="#3f9a3c" stroke-width="7" stroke-linecap="round"/>',
+    pineapple: '<path d="M7 31L15 8h10l8 23z" fill="#f5d547" stroke="#c9a21f" stroke-width="2" stroke-linejoin="round"/>',
+    basil: '<path d="M20 3C33 12 33 28 20 37C7 28 7 12 20 3z" fill="#2f7d3b"/><path d="M20 8v24" stroke="#1f5a28" stroke-width="1.5"/>',
+    bacon: '<path d="M4 14q5-6 11 0t11 0t10 0v12q-5 6-10 0t-11 0t-11 0z" fill="#b8473a" stroke="#8a2d24" stroke-width="2" stroke-linejoin="round"/><path d="M6 20q4.5-6 9 0t11 0t8 0" fill="none" stroke="#f1c9b0" stroke-width="3"/>',
+    feta: '<rect x="8" y="8" width="24" height="24" rx="3" fill="#fbf7ec" stroke="#cfc6ae" stroke-width="2"/>'
+  };
+  var NAMES = Object.keys(TYPES);
+  var MAX_TOPPINGS = 12;
+
+  var $ = function (id) { return document.getElementById(id); };
+  var pizza = $('pizza'), piecesEl = $('pieces'), statusEl = $('status');
+  var finishEl = $('finish'), nextBtn = $('next');
+
+  var level = 1, score = 0, best = 0, remaining = 0, lastCount = 0, nextCount = 0;
+  var selected = null, drag = null, suppressClick = false;
+
+  try { best = parseInt(localStorage.getItem('pizzaPuzzleBest'), 10) || 0; } catch (e) {}
+
+  function svg(type) {
+    return '<svg viewBox="0 0 40 40" aria-hidden="true">' + TYPES[type] + '</svg>';
+  }
+  function shuffle(a) {
+    for (var i = a.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var t = a[i]; a[i] = a[j]; a[j] = t;
+    }
+    return a;
+  }
+
+  // Levels 1-10 go 3, 4, 5 ... 12 toppings; after that a random count that differs from the last one.
+  function toppingCount(lv, prev) {
+    if (lv <= MAX_TOPPINGS - 2) return lv + 2;
+    var n;
+    do { n = 6 + Math.floor(Math.random() * (MAX_TOPPINGS - 5)); } while (n === prev);
+    return n;
+  }
+
+  // Random, non-overlapping spots inside the cheese. Coordinates are % of the pizza.
+  function layout(n, size) {
+    var gap = size * 1.08;
+    for (var round = 0; round < 80; round++) {
+      var pts = [];
+      for (var tries = 0; pts.length < n && tries < 400; tries++) {
+        var r = 33 * Math.sqrt(Math.random()), a = Math.random() * Math.PI * 2;
+        var p = { x: 50 + r * Math.cos(a), y: 50 + r * Math.sin(a) };
+        var ok = pts.every(function (q) { return Math.hypot(q.x - p.x, q.y - p.y) >= gap; });
+        if (ok) pts.push(p);
+      }
+      if (pts.length === n) return pts;
+      if (round % 20 === 19) gap *= 0.94;
+    }
+    // Fallback: an even ring.
+    return Array.from({ length: n }, function (_, i) {
+      var a = (i / n) * Math.PI * 2;
+      return { x: 50 + 30 * Math.cos(a), y: 50 + 30 * Math.sin(a) };
+    });
+  }
+
+  function say(text) { statusEl.textContent = text; }
+
+  function renderStats(bump) {
+    $('level').textContent = level;
+    $('score').textContent = score;
+    $('best').textContent = best;
+    if (bump) {
+      var el = $('score');
+      el.classList.remove('bump');
+      void el.offsetWidth;
+      el.classList.add('bump');
+    }
+  }
+
+  function startLevel(count) {
+    var n = count || toppingCount(level, lastCount);
+    lastCount = n;
+    remaining = n;
+    selected = null;
+    pizza.classList.remove('done');
+    pizza.innerHTML = '';
+    piecesEl.innerHTML = '';
+    piecesEl.hidden = false;
+    finishEl.hidden = true;
+
+    var size = n <= 6 ? 20 : n <= 9 ? 17 : 15;
+    var order = shuffle(NAMES.slice());
+    var types = [];
+    for (var i = 0; i < n; i++) types.push(order[i % order.length]);
+
+    layout(n, size).forEach(function (p, i) {
+      var s = document.createElement('button');
+      s.type = 'button';
+      s.className = 'spot';
+      s.dataset.type = types[i];
+      s.setAttribute('aria-label', 'Empty ' + types[i] + ' spot');
+      s.style.left = p.x + '%';
+      s.style.top = p.y + '%';
+      s.style.width = s.style.height = size + '%';
+      s.style.rotate = Math.floor(Math.random() * 360) + 'deg';
+      s.innerHTML = svg(types[i]);
+      s.addEventListener('click', onSpotClick);
+      pizza.appendChild(s);
+    });
+
+    shuffle(types.slice()).forEach(function (t) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'piece';
+      b.dataset.type = t;
+      b.setAttribute('aria-label', t);
+      b.innerHTML = svg(t);
+      b.addEventListener('pointerdown', onDown);
+      b.addEventListener('pointermove', onMove);
+      b.addEventListener('pointerup', onUp);
+      b.addEventListener('pointercancel', onCancel);
+      b.addEventListener('click', onPieceClick);
+      b.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+      piecesEl.appendChild(b);
+    });
+
+    renderStats(false);
+    say('Drag each of the ' + n + ' toppings onto its matching outline.');
+  }
+
+  function select(piece) {
+    if (selected) selected.classList.remove('selected');
+    selected = piece;
+    if (piece) piece.classList.add('selected');
+  }
+
+  function attempt(piece, spot) {
+    if (spot.dataset.type !== piece.dataset.type) {
+      spot.classList.remove('miss');
+      void spot.offsetWidth;
+      spot.classList.add('miss');
+      say('Not a match. Look at the shape and try again.');
+      return;
+    }
+    spot.classList.add('filled');
+    spot.disabled = true;
+    spot.setAttribute('aria-label', spot.dataset.type + ' placed');
+    piece.classList.add('used');
+    piece.classList.remove('selected');
+    piece.disabled = true;
+    if (selected === piece) selected = null;
+
+    score += 1;
+    remaining -= 1;
+    if (score > best) {
+      best = score;
+      try { localStorage.setItem('pizzaPuzzleBest', String(best)); } catch (e) {}
+    }
+    renderStats(true);
+
+    if (remaining === 0) finishLevel();
+    else say('Nice! +1 point. ' + remaining + ' to go.');
+  }
+
+  function finishLevel() {
+    pizza.classList.add('done');
+    nextCount = toppingCount(level + 1, lastCount);
+    piecesEl.hidden = true;
+    finishEl.hidden = false;
+    nextBtn.textContent = 'Next pizza: ' + nextCount + ' toppings';
+    say('Pizza ' + level + ' is ready!');
+  }
+
+  function spotAt(x, y) {
+    var bestSpot = null, bestDist = Infinity;
+    pizza.querySelectorAll('.spot:not(.filled)').forEach(function (s) {
+      var r = s.getBoundingClientRect();
+      var d = Math.hypot(r.left + r.width / 2 - x, r.top + r.height / 2 - y);
+      if (d < r.width * 0.7 && d < bestDist) { bestDist = d; bestSpot = s; }
+    });
+    return bestSpot;
+  }
+
+  /* Dragging (mouse, touch and pen all arrive as pointer events) */
+  function onDown(e) {
+    var p = e.currentTarget;
+    if (drag || p.classList.contains('used') || (e.pointerType === 'mouse' && e.button !== 0)) return;
+    try { p.setPointerCapture(e.pointerId); } catch (err) {}
+    drag = { piece: p, id: e.pointerId, x0: e.clientX, y0: e.clientY, moved: false, ghost: null, lift: 0, x: 0, y: 0 };
+  }
+
+  function onMove(e) {
+    if (!drag || e.pointerId !== drag.id) return;
+    if (!drag.moved) {
+      if (Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) < 8) return;
+      drag.moved = true;
+      select(null);
+      var anySpot = pizza.querySelector('.spot');
+      var size = anySpot ? anySpot.getBoundingClientRect().width : 60;
+      var g = document.createElement('div');
+      g.className = 'ghost';
+      g.style.width = g.style.height = Math.max(size, 44) + 'px';
+      g.innerHTML = svg(drag.piece.dataset.type);
+      document.body.appendChild(g);
+      drag.ghost = g;
+      // On touch, hold the topping above the finger so it stays visible.
+      drag.lift = e.pointerType === 'touch' ? Math.max(size, 44) * 0.7 : 0;
+      drag.piece.classList.add('lifting');
+    }
+    drag.x = e.clientX;
+    drag.y = e.clientY - drag.lift;
+    drag.ghost.style.left = drag.x + 'px';
+    drag.ghost.style.top = drag.y + 'px';
+    e.preventDefault();
+  }
+
+  function endDrag() {
+    var d = drag;
+    drag = null;
+    if (!d) return null;
+    if (d.ghost) d.ghost.remove();
+    d.piece.classList.remove('lifting');
+    return d;
+  }
+
+  function onUp(e) {
+    if (!drag || e.pointerId !== drag.id) return;
+    var d = endDrag();
+    if (!d.moved) return; // a tap: the click handler selects the piece
+    suppressClick = true;
+    setTimeout(function () { suppressClick = false; }, 0);
+    var spot = spotAt(d.x, d.y);
+    if (spot) attempt(d.piece, spot);
+    else say('Drop the topping on a matching outline on the pizza.');
+  }
+
+  function onCancel(e) {
+    if (drag && e.pointerId === drag.id) endDrag();
+  }
+
+  /* Tap or keyboard alternative: pick a topping, then pick a spot */
+  function onPieceClick(e) {
+    var p = e.currentTarget;
+    if (suppressClick || p.classList.contains('used')) return;
+    if (selected === p) { select(null); return; }
+    select(p);
+    say('Now tap the matching outline, or drag the topping there.');
+  }
+
+  function onSpotClick(e) {
+    var s = e.currentTarget;
+    if (s.classList.contains('filled')) return;
+    if (!selected) { say('Pick a topping from the tray first.'); return; }
+    attempt(selected, s);
+  }
+
+  nextBtn.addEventListener('click', function () {
+    level += 1;
+    startLevel(nextCount);
+  });
+  $('restart').addEventListener('click', function () {
+    level = 1; score = 0; lastCount = 0;
+    startLevel();
+  });
+
+  function start(saved) {
+    if (saved && saved.level) { level = saved.level; score = saved.score || 0; }
+    startLevel();
+  }
+  var hot = window.claude && window.claude.hot;
+  if (hot && hot.snapshot) hot.snapshot(function () { return { level: level, score: score }; });
+  if (hot && hot.ready) hot.ready(start); else start((hot && hot.data) || {});
+})();
+</script>
